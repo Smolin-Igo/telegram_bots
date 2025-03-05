@@ -267,28 +267,6 @@ def callback_back_to_products(call):
     bot.answer_callback_query(call.id)  # Убираем "часики" на кнопке
 
 @bot.callback_query_handler(func=lambda call: call.data == "back_to_categories")
-def callback_back_to_categories(call):
-    """Возвращает к списку категорий."""
-    bot.send_message(call.message.chat.id, text="Выберите категорию:", reply_markup=create_categories_keyboard())
-    # bot.delete_message(call.message.chat.id, call.message.message_id)
-    bot.answer_callback_query(call.id)  # Убираем "часики" на кнопке
-
-# --- Обработчики административных команд ---
-@bot.message_handler(commands=['admin'])
-def admin_panel(message):
-    """Вход в панель администратора."""
-    if is_admin(message.from_user.id):
-        bot.send_message(message.chat.id, "Добро пожаловать в панель администратора!", reply_markup=create_admin_keyboard())
-    else:
-        bot.send_message(message.chat.id, "У вас нет прав для выполнения этой команды.")
-
-@bot.message_handler(func=lambda message: message.text == "Добавить категорию")
-def ask_category_name(message):
-    """Запрашивает название новой категории."""
-    if is_admin(message.from_user.id):
-        bot.send_message(message.chat.id, "Введите название новой категории:")
-        bot.register_next_step_handler(message, process_add_category) #После этого сообщения ждет ввода текста и вызывает функцию process_add_category
-
 def process_add_category(message):
     """Добавляет новую категорию в базу данных."""
     category_name = message.text
@@ -297,51 +275,11 @@ def process_add_category(message):
     else:
         bot.send_message(message.chat.id, "Ошибка: Категория с таким именем уже существует.")
 
-@bot.message_handler(func=lambda message: message.text == "Удалить категорию")
-def ask_delete_category(message):
-     """Запрашивает название категории для удаления."""
-     if is_admin(message.from_user.id):
-         conn = get_db_connection()
-         cursor = conn.cursor()
-         cursor.execute("SELECT name FROM categories")
-         categories = [row[0] for row in cursor.fetchall()]
-         conn.close()
-
-         if not categories:
-             bot.send_message(message.chat.id, "Нет категорий для удаления.")
-             return
-
-         keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-         for category in categories:
-             keyboard.add(category)
-         bot.send_message(message.chat.id, "Выберите категорию для удаления:", reply_markup=keyboard)
-         bot.register_next_step_handler(message, process_delete_category)
-
 def process_delete_category(message):
     """Удаляет категорию из базы данных."""
     category_name = message.text
     delete_category(category_name)
     bot.send_message(message.chat.id, f"Категория '{category_name}' успешно удалена.", reply_markup=create_admin_keyboard()) #Возвращаем админ-клавиатуру
-
-@bot.message_handler(func=lambda message: message.text == "Добавить продукт")
-def ask_add_product(message):
-    """Запрашивает данные для добавления нового продукта."""
-    if is_admin(message.from_user.id):
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT name FROM categories")
-        categories = [row[0] for row in cursor.fetchall()]
-        conn.close()
-
-        if not categories:
-            bot.send_message(message.chat.id, "Сначала добавьте хотя бы одну категорию.")
-            return
-
-        keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-        for category in categories:
-            keyboard.add(category)
-        bot.send_message(message.chat.id, "Выберите категорию для нового продукта:", reply_markup=keyboard)
-        bot.register_next_step_handler(message, process_add_product_category) #После выбора категории переходим к следующему шагу
 
 def process_add_product_category(message):
     """Обрабатывает выбор категории для нового продукта."""
@@ -389,13 +327,6 @@ def process_finish_add_product(message, category_id, product_name, product_descr
     seller_contacts = message.text
     add_product(category_id, product_name, product_description, product_price, product_image, seller_contacts)
     bot.send_message(message.chat.id, f"Продукт '{product_name}' успешно добавлен.", reply_markup=create_admin_keyboard())
-
-@bot.message_handler(func=lambda message: message.text == "Удалить продукт")
-def ask_delete_product(message):
-    """Запрашивает ID продукта для удаления."""
-    if is_admin(message.from_user.id):
-        bot.send_message(message.chat.id, "Введите ID продукта для удаления:")
-        bot.register_next_step_handler(message, process_delete_product)
 
 def process_delete_product(message):
     """Удаляет продукт из базы данных."""
@@ -535,94 +466,6 @@ def callback_remove_from_favorites(call):
     product_id = int(call.data.split("_")[2])  # Получаем ID товара
     remove_from_favorites(user_id, product_id)
     bot.answer_callback_query(call.id, "Товар удален из избранного!")
-
-@bot.callback_query_handler(func=lambda call: call.data.startswith("show_product_"))
-def callback_show_product(call):
-    """Выводит подробную информацию о товаре."""
-    product_id = int(call.data.split("_")[3]) #извлекаем product_id
-    user_id = call.message.chat.id #Получаем id пользователя
-    show_product_details(product_id, call.message.chat.id, user_id) #Передаем user_id
-    bot.answer_callback_query(call.id)  # Убираем "часики" на кнопке
-
-@bot.callback_query_handler(func=lambda call: call.data.startswith("back_to_products_"))
-def callback_back_to_products(call):
-    """Возвращает к списку товаров."""
-    category = call.data.split("_")[2] #Получаем category
-
-    products_keyboard = create_products_keyboard(category)
-    bot.send_message(call.message.chat.id, text=f"Товары в категории '{category}':", reply_markup=products_keyboard)
-    # bot.delete_message(call.message.chat.id, call.message.message_id)
-    bot.answer_callback_query(call.id)  # Убираем "часики" на кнопке
-
-@bot.callback_query_handler(func=lambda call: call.data == "back_to_categories")
-def callback_back_to_categories(call):
-    """Возвращает к списку категорий."""
-    bot.send_message(call.message.chat.id, text="Выберите категорию:", reply_markup=create_categories_keyboard())
-    # bot.delete_message(call.message.chat.id, call.message.message_id)
-    bot.answer_callback_query(call.id)  # Убираем "часики" на кнопке
-
-# --- Обработчики административных команд ---
-@bot.message_handler(commands=['admin'])
-def admin_panel(message):
-    """Вход в панель администратора."""
-    if is_admin(message.from_user.id):
-        bot.send_message(message.chat.id, "Добро пожаловать в панель администратора!", reply_markup=create_admin_keyboard())
-    else:
-        bot.send_message(message.chat.id, "У вас нет прав для выполнения этой команды.")
-
-@bot.message_handler(func=lambda message: message.text == "Добавить категорию")
-def ask_category_name(message):
-    """Запрашивает название новой категории."""
-    if is_admin(message.from_user.id):
-        bot.send_message(message.chat.id, "Введите название новой категории:")
-        bot.register_next_step_handler(message, process_add_category) #После этого сообщения ждет ввода текста и вызывает функцию process_add_category
-
-@bot.message_handler(func=lambda message: message.text == "Удалить категорию")
-def ask_delete_category(message):
-     """Запрашивает название категории для удаления."""
-     if is_admin(message.from_user.id):
-         conn = get_db_connection()
-         cursor = conn.cursor()
-         cursor.execute("SELECT name FROM categories")
-         categories = [row[0] for row in cursor.fetchall()]
-         conn.close()
-
-         if not categories:
-             bot.send_message(message.chat.id, "Нет категорий для удаления.")
-             return
-
-         keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-         for category in categories:
-             keyboard.add(category)
-         bot.send_message(message.chat.id, "Выберите категорию для удаления:", reply_markup=keyboard)
-         bot.register_next_step_handler(message, process_delete_category)
-
-@bot.message_handler(func=lambda message: message.text == "Добавить продукт")
-def ask_add_product(message):
-    """Запрашивает данные для добавления нового продукта."""
-    if is_admin(message.from_user.id):
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT name FROM categories")
-        categories = [row[0] for row in cursor.fetchall()]
-        conn.close()
-
-        if not categories:
-            bot.send_message(message.chat.id, "Сначала добавьте хотя бы одну категорию.")
-            return
-
-        keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-        for category in categories:
-            keyboard.add(category)
-        bot.send_message(message.chat.id, "Выберите категорию для нового продукта:", reply_markup=keyboard)
-        bot.register_next_step_handler(message, process_add_product_category) #После выбора категории переходим к следующему шагу
-
-@bot.message_handler(func=lambda message: message.text == "Удалить продукт")
-def ask_delete_product(message):
-    """Запрашивает ID продукта для удаления."""
-    if is_admin(message.from_user.id):
-        bot.send_message(message.chat.id, "Введите ID продукта для удаления:")
-        bot.register_next_step_handler(message, process_delete_product)
 
  # --- Обработчики callback-запросов ---
 @bot.callback_query_handler(func=lambda call: call.data.startswith("add_to_favorites_") or call.data.startswith("remove_from_favorites_"))
